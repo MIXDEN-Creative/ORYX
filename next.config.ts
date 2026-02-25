@@ -7,7 +7,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     // keeps app router stable as you grow
-    typedRoutes: true,
+    typedRoutes: false,
   },
 };
 

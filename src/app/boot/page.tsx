@@ -54,7 +54,7 @@ export default function BootPage() {
         return;
       }
 
-      router.replace("/select-org");
+      router.replace("/dashboard");
     })();
   }, [router]);
 

@@ -13,7 +13,7 @@ export type OrgContext = {
 const ORG_COOKIE = "oryx_org_id";
 
 export async function loadOrgContext(): Promise<OrgContext> {
-  const supabase = supabaseServer();
+  const supabase = await supabaseServer();
 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) {
@@ -46,7 +46,8 @@ export async function loadOrgContext(): Promise<OrgContext> {
 
   // 2) Determine active org
   // We store active org in a cookie so every request knows which org is selected.
-  const cookieHeader = (await import("next/headers")).cookies();
+  const { cookies } = await import("next/headers");
+  const cookieHeader = await cookies();
   const cookieOrgId = cookieHeader.get(ORG_COOKIE)?.value;
 
   const activeOrg =

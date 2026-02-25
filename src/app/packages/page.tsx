@@ -1,3 +1,5 @@
+"use client";
+
 export default function PackagesPage() {
   return (
     <div className="page">
