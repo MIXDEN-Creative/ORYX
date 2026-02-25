@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase-server";
 import { cookies } from "next/headers";
+import { supabaseServer } from "@/lib/supabase-server";
 
 export async function GET() {
   const supabase = await supabaseServer();
 
   const { data: userRes } = await supabase.auth.getUser();
   const user = userRes?.user;
-
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
@@ -28,7 +27,6 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const enabled = (mods || []).filter((m) => m.enabled).map((m) => m.module);
-
+  const enabled = (mods ?? []).filter((m) => m.enabled).map((m) => m.module);
   return NextResponse.json({ org_id: activeOrgId, enabled });
 }
