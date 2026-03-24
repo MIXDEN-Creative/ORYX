@@ -1,4 +1,4 @@
-export default function RefundPolicyPage() {
+export default function PrivacyPage() {
   return (
     <main
       style={{
@@ -11,32 +11,28 @@ export default function RefundPolicyPage() {
     >
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
         <h1 style={{ fontSize: "2.5rem", marginBottom: "24px" }}>
-          Refund and Dispute Policy
+          Privacy Policy
         </h1>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          EVNTSZN is a ticketing and event management platform that helps facilitate
-          ticket sales between event organizers and attendees.
+          EVNTSZN, powered by ORYX, may collect information provided by users,
+          including contact details, account information, and transaction-related
+          information, in order to operate the platform and provide services.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          Unless otherwise stated on a specific event page, all ticket purchases are
-          final. Refund eligibility may depend on the organizer’s policy and the
-          circumstances surrounding the event.
+          Information may be used for customer support, platform operations,
+          transaction processing, and service improvement.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          If an event is canceled and not rescheduled, customers may be eligible for
-          a full refund.
+          EVNTSZN does not sell personal information. Information may be shared with
+          trusted service providers where necessary to process payments, support
+          events, or maintain platform functionality.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          If an event is postponed or rescheduled, tickets may remain valid for the
-          new event date unless otherwise communicated.
-        </p>
-
-        <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          For disputes, refund questions, or ticket issues, contact{" "}
+          For privacy-related questions, contact{" "}
           <a
             href="mailto:support@evntszn.com"
             style={{ color: "#A259FF", textDecoration: "none" }}

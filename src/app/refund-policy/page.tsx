@@ -1,4 +1,4 @@
-export default function TermsPage() {
+export default function RefundPolicyPage() {
   return (
     <main
       style={{
@@ -11,32 +11,32 @@ export default function TermsPage() {
     >
       <div style={{ maxWidth: "800px", margin: "0 auto" }}>
         <h1 style={{ fontSize: "2.5rem", marginBottom: "24px" }}>
-          Terms of Service
+          Refund and Dispute Policy
         </h1>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          By accessing or using EVNTSZN, you agree to use the platform only for
-          lawful purposes and in accordance with these terms.
+          EVNTSZN, powered by ORYX, is a ticketing and event management platform
+          that helps facilitate ticket sales between event organizers and attendees.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          EVNTSZN provides tools for event discovery, ticket sales, event
-          management, and related services for attendees and organizers.
+          Unless otherwise stated on a specific event page, all ticket purchases are
+          final. Refund eligibility may depend on the organizer’s policy and the
+          circumstances surrounding the event.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          Event organizers are responsible for the accuracy of their event listings,
-          event execution, and compliance with applicable laws and regulations.
+          If an event is canceled and not rescheduled, customers may be eligible for
+          a full refund.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          EVNTSZN reserves the right to remove content, suspend accounts, or limit
-          access to the platform where necessary to protect the business, users, or
-          the integrity of the platform.
+          If an event is postponed or rescheduled, tickets may remain valid for the
+          new event date unless otherwise communicated.
         </p>
 
         <p style={{ lineHeight: 1.8, color: "#D8D8D8", marginBottom: "18px" }}>
-          For support or legal inquiries, contact{" "}
+          For disputes, refund questions, or ticket issues, contact{" "}
           <a
             href="mailto:support@evntszn.com"
             style={{ color: "#A259FF", textDecoration: "none" }}
