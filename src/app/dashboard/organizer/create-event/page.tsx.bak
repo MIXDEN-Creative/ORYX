@@ -1,0 +1,2203 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import * as Switch from "@radix-ui/react-switch";
+import { DayPicker } from "react-day-picker";
+import { format } from "date-fns";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import "react-day-picker/dist/style.css";
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
+type TicketTierPreset = "ga" | "earlyBird" | "vip" | "vipPlus" | "custom";
+
+type TicketTier = {
+  id: string;
+  preset: TicketTierPreset;
+  name: string;
+  price: string;
+  quantity: string;
+  description: string;
+};
+
+type UploadedImage = {
+  fileName: string;
+  url: string;
+  previewUrl: string;
+  status: "uploading" | "uploaded" | "error";
+  error?: string;
+};
+
+type FieldErrors = {
+  title?: string;
+  eventType?: string;
+  description?: string;
+  eventDate?: string;
+  startTime?: string;
+  venueName?: string;
+  venueAddress?: string;
+  city?: string;
+  ageRequirement?: string;
+  attire?: string;
+  refundSetting?: string;
+  capacity?: string;
+  ticketSetup?: string;
+  images?: string;
+  permission?: string;
+};
+
+const EVENT_TYPES = [
+  "Nightlife / Parties",
+  "Singles / Dating Events",
+  "Concerts / Live Music",
+  "DJ Events",
+  "Festivals / Large Outdoor Events",
+  "Networking / Professional Mixers",
+  "Creative / Artist Showcases",
+  "Comedy Shows",
+  "Cultural Events",
+  "Workshops / Classes",
+  "Pop-Ups / Experiences",
+  "Community Events",
+  "College Events",
+  "Brand Activations",
+  "Private Ticketed Events",
+];
+
+const AGE_OPTIONS = ["All Ages", "18+", "21+"];
+
+const ATTIRE_OPTIONS = [
+  "No Dress Code",
+  "Casual",
+  "Smart Casual",
+  "Upscale Casual",
+  "Cocktail",
+  "Business Casual",
+  "Semi-Formal",
+  "Formal",
+  "All White",
+  "All Black",
+  "Streetwear",
+  "Theme / Costume Required",
+];
+
+const calendarStyles = `
+.rdp {
+  --rdp-accent-color: #A259FF;
+  --rdp-background-color: rgba(162,89,255,0.16);
+  width: 100%;
+}
+
+.rdp-root {
+  width: 100%;
+}
+
+.rdp-months {
+  width: 100%;
+}
+
+.rdp-month {
+  width: 100%;
+}
+
+.rdp-month_caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.rdp-caption_label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: -0.02em;
+}
+
+.rdp-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rdp-button_previous,
+.rdp-button_next {
+  height: 2.5rem;
+  width: 2.5rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.45);
+  color: white;
+  transition: all 0.15s ease;
+}
+
+.rdp-button_previous:hover,
+.rdp-button_next:hover {
+  border-color: rgba(162,89,255,0.45);
+  background: rgba(162,89,255,0.12);
+}
+
+.rdp-month_grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rdp-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rdp-weekday {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 2.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(113 113 122);
+}
+
+.rdp-weeks {
+  width: 100%;
+}
+
+.rdp-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.rdp-day {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.rdp-day_button {
+  height: 2.75rem;
+  width: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.85rem;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgb(228 228 231);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.rdp-day_button:hover {
+  background: rgba(162,89,255,0.14);
+  color: white;
+}
+
+.rdp-selected .rdp-day_button {
+  background: #A259FF;
+  color: white;
+  box-shadow: 0 0 24px rgba(162,89,255,0.45);
+}
+
+.rdp-today .rdp-day_button {
+  border-color: rgba(162,89,255,0.55);
+  color: white;
+}
+
+.rdp-outside .rdp-day_button {
+  color: rgb(82 82 91);
+}
+
+.rdp-disabled .rdp-day_button {
+  color: rgb(63 63 70);
+  opacity: 0.45;
+}
+`;
+
+const shellCard =
+  "rounded-[32px] border border-white/10 bg-zinc-950/72 shadow-[0_18px_70px_rgba(0,0,0,0.28)]";
+const sectionCard = "rounded-[28px] border border-white/10 bg-black/25";
+const inputClass =
+  "mt-2 h-14 w-full rounded-2xl border border-white/12 bg-zinc-950/85 px-4 text-white outline-none transition placeholder:text-zinc-500 focus:border-[#A259FF] focus:ring-1 focus:ring-[#A259FF]/50";
+const inputErrorClass =
+  "mt-2 h-14 w-full rounded-2xl border border-red-400/70 bg-zinc-950/85 px-4 text-white outline-none transition placeholder:text-zinc-500 focus:border-red-400 focus:ring-1 focus:ring-red-400/40";
+const textareaClass =
+  "mt-2 min-h-[120px] w-full rounded-2xl border border-white/12 bg-zinc-950/85 p-4 text-white outline-none transition placeholder:text-zinc-500 focus:border-[#A259FF] focus:ring-1 focus:ring-[#A259FF]/50";
+const textareaErrorClass =
+  "mt-2 min-h-[120px] w-full rounded-2xl border border-red-400/70 bg-zinc-950/85 p-4 text-white outline-none transition placeholder:text-zinc-500 focus:border-red-400 focus:ring-1 focus:ring-red-400/40";
+
+function RequiredMark() {
+  return <span className="ml-1 font-semibold text-[#A259FF]">*</span>;
+}
+
+function Label({
+  children,
+  required = false,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <label className="text-sm font-medium text-zinc-300">
+      {children}
+      {required ? <RequiredMark /> : null}
+    </label>
+  );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-2 text-sm text-red-300">{message}</p>;
+}
+
+function StepPill({
+  label,
+  active,
+  complete,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  complete: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-3 rounded-full border px-4 py-2.5 text-sm transition ${
+        active
+          ? "border-[#A259FF] bg-[#A259FF]/18 text-white shadow-[0_0_0_1px_rgba(162,89,255,0.35),0_0_30px_rgba(162,89,255,0.18)]"
+          : complete
+            ? "border-emerald-400/30 bg-emerald-400/8 text-emerald-200"
+            : "border-white/10 bg-white/5 text-zinc-300 hover:border-white/20"
+      }`}
+    >
+      <span
+        className={`h-2.5 w-2.5 rounded-full ${
+          complete ? "bg-emerald-300" : active ? "bg-[#CFAEFF]" : "bg-zinc-500"
+        }`}
+      />
+      {label}
+    </button>
+  );
+}
+
+function SectionHeader({
+  eyebrow,
+  title,
+  description,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-8">
+      <p className="text-xs uppercase tracking-[0.28em] text-[#CDA8FF]">{eyebrow}</p>
+      <h2 className="mt-3 text-2xl font-semibold tracking-tight md:text-3xl">{title}</h2>
+      <p className="mt-2 max-w-2xl text-sm leading-7 text-zinc-400 md:text-base">{description}</p>
+    </div>
+  );
+}
+
+function ExpandRow({
+  title,
+  subtitle,
+  open,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-zinc-950/55 px-5 py-4 text-left transition hover:border-white/20"
+    >
+      <div>
+        <p className="text-sm font-medium text-white">{title}</p>
+        <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>
+      </div>
+      <span className="text-xl text-zinc-400">{open ? "−" : "+"}</span>
+    </button>
+  );
+}
+
+function Toggle({
+  enabled,
+  onChange,
+}: {
+  enabled: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <Switch.Root
+      checked={enabled}
+      onCheckedChange={onChange}
+      className={`relative inline-flex h-9 w-[66px] shrink-0 cursor-pointer items-center rounded-full border outline-none transition ${
+        enabled
+          ? "border-[#A259FF] bg-[#A259FF]/30 shadow-[0_0_0_1px_rgba(162,89,255,0.35),0_0_24px_rgba(162,89,255,0.25)]"
+          : "border-white/15 bg-zinc-950/85"
+      }`}
+    >
+      <Switch.Thumb className="block h-7 w-7 translate-x-1 rounded-full bg-white shadow-md transition-transform data-[state=checked]:translate-x-[30px]" />
+    </Switch.Root>
+  );
+}
+
+function ToggleCard({
+  title,
+  description,
+  enabled,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="rounded-3xl border border-white/10 bg-zinc-950/60 p-5">
+      <div className="flex min-h-[140px] flex-col justify-between gap-5">
+        <div>
+          <p className="text-xl font-semibold leading-tight text-white">{title}</p>
+          <p className="mt-3 max-w-[26ch] text-sm leading-7 text-zinc-400">{description}</p>
+        </div>
+
+        <div className="flex justify-end">
+          <Toggle enabled={enabled} onChange={onChange} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function makeTier(id: string, name: string, preset: TicketTierPreset): TicketTier {
+  return {
+    id,
+    preset,
+    name,
+    price: "",
+    quantity: "",
+    description: "",
+  };
+}
+
+function buildTimeOptions() {
+  const options: string[] = [];
+
+  for (let hour = 0; hour < 24; hour++) {
+    for (const minute of [0, 30]) {
+      const suffix = hour >= 12 ? "PM" : "AM";
+      const displayHour = hour % 12 || 12;
+      const displayMinute = minute === 0 ? "00" : "30";
+      options.push(`${displayHour}:${displayMinute} ${suffix}`);
+    }
+  }
+
+  return options;
+}
+
+const TIME_OPTIONS = buildTimeOptions();
+
+function parseDateValue(value: string) {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+}
+
+function formatEventDateParts(value: string) {
+  const localDate = parseDateValue(value);
+  if (!localDate) {
+    return {
+      monthDay: "Date TBA",
+      shortMonthDay: "TBA",
+      weekdayMonthDay: "",
+    };
+  }
+
+  return {
+    monthDay: format(localDate, "MMMM d, yyyy"),
+    shortMonthDay: format(localDate, "MMM d"),
+    weekdayMonthDay: format(localDate, "EEEE, MMMM d"),
+  };
+}
+
+function normalizeTimeInput(value: string) {
+  return value.replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+function to12HourDisplay(value: string) {
+  if (!value) return "Time TBA";
+
+  const raw = value.trim().toUpperCase();
+
+  const ampmMatch = raw.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/);
+  if (ampmMatch) {
+    const hour = Number(ampmMatch[1]);
+    const minute = ampmMatch[2] ?? "00";
+    const suffix = ampmMatch[3];
+    if (hour >= 1 && hour <= 12) return `${hour}:${minute} ${suffix}`;
+  }
+
+  const twentyFourMatch = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourMatch) {
+    let hour = Number(twentyFourMatch[1]);
+    const minute = twentyFourMatch[2];
+    if (hour >= 0 && hour <= 23) {
+      const suffix = hour >= 12 ? "PM" : "AM";
+      hour = hour % 12 || 12;
+      return `${hour}:${minute} ${suffix}`;
+    }
+  }
+
+  return value;
+}
+
+function formatMoney(value: string) {
+  const numeric = Number(value || 0);
+  if (!Number.isFinite(numeric)) return "$0";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: numeric % 1 === 0 ? 0 : 2,
+  }).format(numeric);
+}
+
+function formatPreviewDate(value: string) {
+  if (!value) return "Date TBA";
+  const date = parseDateValue(value) || new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date TBA";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+function formatLongPreviewDate(value: string) {
+  if (!value) return "Date TBA";
+  const date = parseDateValue(value) || new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date TBA";
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
+
+function sumQuantities(tiers: TicketTier[]) {
+  return tiers.reduce((sum, tier) => {
+    const n = Number(tier.quantity || 0);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+export default function CreateEventPage() {
+  const router = useRouter();
+  const googleSearchRef = useRef<HTMLInputElement | null>(null);
+
+  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
+
+  const [activeStep, setActiveStep] = useState<1 | 2 | 3 | 4>(1);
+  const [previewMode, setPreviewMode] = useState<"card" | "page">("card");
+  const [previewTicketDrawerOpen, setPreviewTicketDrawerOpen] = useState(false);
+
+  const [title, setTitle] = useState("");
+  const [eventType, setEventType] = useState("");
+  const [description, setDescription] = useState("");
+
+  const [venueName, setVenueName] = useState("");
+  const [venueAddress, setVenueAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [venueWebsite, setVenueWebsite] = useState("");
+
+  const [eventDate, setEventDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+
+  const [ageRequirement, setAgeRequirement] = useState("All Ages");
+  const [customAgeRequirement, setCustomAgeRequirement] = useState("");
+  const [attire, setAttire] = useState("No Dress Code");
+
+  const [refundsAllowed, setRefundsAllowed] = useState(false);
+  const [refundChoiceMade, setRefundChoiceMade] = useState(false);
+
+  const [isFreeEvent, setIsFreeEvent] = useState(false);
+  const [capacity, setCapacity] = useState("");
+
+  const [earlyBirdEnabled, setEarlyBirdEnabled] = useState(false);
+  const [vipEnabled, setVipEnabled] = useState(false);
+  const [vipPlusEnabled, setVipPlusEnabled] = useState(false);
+
+  const [tagsInput, setTagsInput] = useState("");
+  const [adaInfo, setAdaInfo] = useState("");
+  const [parkingInfo, setParkingInfo] = useState("");
+
+  const [faq1Question, setFaq1Question] = useState("");
+  const [faq1Answer, setFaq1Answer] = useState("");
+  const [faq2Question, setFaq2Question] = useState("");
+  const [faq2Answer, setFaq2Answer] = useState("");
+  const [faq3Question, setFaq3Question] = useState("");
+  const [faq3Answer, setFaq3Answer] = useState("");
+
+  const [repPayoutEnabled, setRepPayoutEnabled] = useState(false);
+  const [repInviteEmail, setRepInviteEmail] = useState("");
+  const [repInviteRole, setRepInviteRole] = useState("promoter");
+  const [repPayoutType, setRepPayoutType] = useState("percent");
+  const [repPayoutValue, setRepPayoutValue] = useState("");
+
+  const [contentPermissionAccepted, setContentPermissionAccepted] = useState(false);
+
+  const [showVenueExtras, setShowVenueExtras] = useState(false);
+  const [showFaqs, setShowFaqs] = useState(false);
+  const [showPromoterExtras, setShowPromoterExtras] = useState(false);
+  const [showTags, setShowTags] = useState(false);
+
+  const [image1, setImage1] = useState<UploadedImage | null>(null);
+  const [image2, setImage2] = useState<UploadedImage | null>(null);
+  const [image3, setImage3] = useState<UploadedImage | null>(null);
+
+  const [imageUploading, setImageUploading] = useState({
+    image1: false,
+    image2: false,
+    image3: false,
+  });
+
+  const setImageBySlot = (
+    slot: "image1" | "image2" | "image3",
+    value: UploadedImage | null
+  ) => {
+    if (slot === "image1") setImage1(value);
+    if (slot === "image2") setImage2(value);
+    if (slot === "image3") setImage3(value);
+  };
+
+  const [ticketTiers, setTicketTiers] = useState<TicketTier[]>([
+    makeTier("ga", "General Admission", "ga"),
+  ]);
+
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [submitMessage, setSubmitMessage] = useState("");
+  const [hasTriedSubmit, setHasTriedSubmit] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+const [currentStep, setCurrentStep] = useState(0);
+
+const steps = [
+  "Core Details",
+  "Venue & Timing",
+  "Audience & Policies",
+  "Tickets",
+  "Images",
+  "Extras & Publish",
+];
+
+
+  useEffect(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (url && key) {
+      setSupabase(createClient(url, key));
+    }
+  }, []);
+
+  useEffect(() => {
+    function syncPresetTier(preset: TicketTierPreset, enabled: boolean, name: string, id: string) {
+      setTicketTiers((current) => {
+        const exists = current.some((tier) => tier.preset === preset);
+
+        if (enabled && !exists) {
+          return [...current, makeTier(id, name, preset)];
+        }
+
+        if (!enabled && exists) {
+          return current.filter((tier) => tier.preset !== preset);
+        }
+
+        return current;
+      });
+    }
+
+    syncPresetTier("earlyBird", earlyBirdEnabled, "Early Bird", "early-bird");
+    syncPresetTier("vip", vipEnabled, "VIP", "vip");
+    syncPresetTier("vipPlus", vipPlusEnabled, "VIP+", "vip-plus");
+  }, [earlyBirdEnabled, vipEnabled, vipPlusEnabled]);
+
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) return;
+    if (!googleSearchRef.current) return;
+
+    let autocomplete: any = null;
+
+    const initAutocomplete = () => {
+      if (!window.google?.maps?.places || !googleSearchRef.current) return;
+
+      autocomplete = new window.google.maps.places.Autocomplete(googleSearchRef.current, {
+        fields: ["name", "formatted_address", "address_components"],
+      });
+
+      autocomplete.addListener("place_changed", () => {
+        const place = autocomplete.getPlace();
+        if (!place) return;
+
+        const name = place.name ?? "";
+        const address = place.formatted_address ?? "";
+
+        let derivedCity = "";
+        for (const component of place.address_components ?? []) {
+          if (component.types.includes("locality")) {
+            derivedCity = component.long_name;
+          }
+        }
+
+        setVenueName(name);
+        setVenueAddress(address);
+        if (derivedCity) setCity(derivedCity);
+      });
+    };
+
+    if (window.google?.maps?.places) {
+      initAutocomplete();
+      return;
+    }
+
+    const existingScript = document.querySelector(
+      'script[data-google-places="true"]'
+    ) as HTMLScriptElement | null;
+
+    if (existingScript) {
+      existingScript.addEventListener("load", initAutocomplete);
+      return () => existingScript.removeEventListener("load", initAutocomplete);
+    }
+
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.setAttribute("data-google-places", "true");
+    script.addEventListener("load", initAutocomplete);
+    document.body.appendChild(script);
+
+    return () => script.removeEventListener("load", initAutocomplete);
+  }, []);
+
+  const selectedEventDate = useMemo(() => parseDateValue(eventDate), [eventDate]);
+  const previewDateParts = useMemo(() => formatEventDateParts(eventDate), [eventDate]);
+
+  const previewTitle = title.trim() || "Your Event Title";
+  const previewType = eventType.trim() || "Event Type";
+  const previewVenue = venueName.trim() || venueAddress.trim() || "Venue TBA";
+  const previewCity = city.trim() || "City TBA";
+  const previewDateShort = formatPreviewDate(eventDate);
+  const previewDateLong = formatLongPreviewDate(eventDate);
+  const previewTime = to12HourDisplay(startTime);
+  const previewImage =
+    image1?.previewUrl ||
+    image1?.url ||
+    image2?.previewUrl ||
+    image2?.url ||
+    image3?.previewUrl ||
+    image3?.url ||
+    "";
+  const previewTags = tagsInput
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const visibleFaqs = [
+    { q: faq1Question.trim(), a: faq1Answer.trim() },
+    { q: faq2Question.trim(), a: faq2Answer.trim() },
+    { q: faq3Question.trim(), a: faq3Answer.trim() },
+  ].filter((item) => item.q && item.a);
+
+  const goNext = () => {
+    setCurrentStep((current) => Math.min(current + 1, steps.length - 1));
+  };
+
+  const goBack = () => {
+    setCurrentStep((current) => Math.max(current - 1, 0));
+  };
+
+  const previewLowestPrice = useMemo(() => {
+    if (isFreeEvent) return "Free";
+
+    const numericPrices = ticketTiers
+      .map((tier) => Number(tier.price || 0))
+      .filter((value) => Number.isFinite(value));
+
+    if (numericPrices.length === 0) return "$0";
+    return formatMoney(String(Math.min(...numericPrices)));
+  }, [isFreeEvent, ticketTiers]);
+
+  const completionCount = useMemo(() => {
+    const checks = [
+      title.trim(),
+      eventType.trim(),
+      description.trim(),
+      eventDate.trim(),
+      startTime.trim(),
+      venueName.trim(),
+      venueAddress.trim(),
+      city.trim(),
+      ageRequirement.trim(),
+      attire.trim(),
+      refundChoiceMade ? "yes" : "",
+      capacity.trim(),
+      image1?.previewUrl || image1?.url || "",
+      image2?.previewUrl || image2?.url || "",
+      contentPermissionAccepted ? "yes" : "",
+    ];
+
+    return checks.filter(Boolean).length;
+  }, [
+    title,
+    eventType,
+    description,
+    eventDate,
+    startTime,
+    venueName,
+    venueAddress,
+    city,
+    ageRequirement,
+    attire,
+    refundChoiceMade,
+    capacity,
+    image1,
+    image2,
+    contentPermissionAccepted,
+  ]);
+
+  const assignedCount = sumQuantities(ticketTiers);
+  const remainingCount = Math.max(0, Number(capacity || 0) - assignedCount);
+
+  const step1Complete = Boolean(
+    title.trim() &&
+      eventType.trim() &&
+      description.trim() &&
+      eventDate.trim() &&
+      startTime.trim() &&
+      venueName.trim() &&
+      venueAddress.trim() &&
+      city.trim()
+  );
+
+  const step2Complete = useMemo(() => {
+    if (!ageRequirement.trim()) return false;
+    if (!attire.trim()) return false;
+    if (!refundChoiceMade) return false;
+    if (!capacity.trim() || Number(capacity) <= 0) return false;
+    if (ticketTiers.length === 0) return false;
+    if (assignedCount > Number(capacity)) return false;
+
+    for (const tier of ticketTiers) {
+      if (!tier.name.trim()) return false;
+      if (!tier.quantity.trim() || Number(tier.quantity) <= 0) return false;
+
+      const presetFreeTier =
+        isFreeEvent && (tier.preset === "ga" || tier.preset === "earlyBird");
+
+      if (!presetFreeTier && (!tier.price.trim() || Number(tier.price) < 0)) {
+        return false;
+      }
+    }
+
+    return true;
+  }, [ageRequirement, attire, refundChoiceMade, capacity, ticketTiers, assignedCount, isFreeEvent]);
+
+  const step3Complete = Boolean(image1?.url && image2?.url);
+  const step4Complete = Boolean(contentPermissionAccepted);
+
+  function addCustomTier() {
+    setTicketTiers((current) => [
+      ...current,
+      makeTier(`custom-${Date.now()}`, "Custom Tier", "custom"),
+    ]);
+  }
+
+  function updateTier(id: string, patch: Partial<TicketTier>) {
+    setTicketTiers((current) =>
+      current.map((tier) => (tier.id === id ? { ...tier, ...patch } : tier))
+    );
+  }
+
+  function removeTier(id: string) {
+    setTicketTiers((current) =>
+      current.filter((tier) => !(tier.id === id && tier.preset === "custom"))
+    );
+  }
+
+  async function uploadImage(
+    file: File,
+    slot: "image1" | "image2" | "image3",
+    localPreviewUrl: string
+  ) {
+    if (!supabase) {
+      setImageBySlot(slot, {
+        fileName: file.name,
+        url: localPreviewUrl,
+        previewUrl: localPreviewUrl,
+        status: "uploaded",
+      });
+      return;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setImageBySlot(slot, {
+        fileName: file.name,
+        url: localPreviewUrl,
+        previewUrl: localPreviewUrl,
+        status: "uploaded",
+      });
+      return;
+    }
+
+    const safeName = file.name.replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
+    const storagePath = `${user.id}/${Date.now()}-${safeName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("event-images")
+      .upload(storagePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from("event-images").getPublicUrl(storagePath);
+
+    setImageBySlot(slot, {
+      fileName: file.name,
+      url: data.publicUrl,
+      previewUrl: localPreviewUrl,
+      status: "uploaded",
+    });
+  }
+
+  async function handleImageChange(
+    e: React.ChangeEvent<HTMLInputElement>,
+    slot: "image1" | "image2" | "image3"
+  ) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const localPreviewUrl = URL.createObjectURL(file);
+
+    setSubmitMessage("");
+    setImageUploading((current) => ({ ...current, [slot]: true }));
+
+    setImageBySlot(slot, {
+      fileName: file.name,
+      url: "",
+      previewUrl: localPreviewUrl,
+      status: "uploading",
+    });
+
+    try {
+      await uploadImage(file, slot, localPreviewUrl);
+    } catch (error) {
+      setImageBySlot(slot, {
+        fileName: file.name,
+        url: localPreviewUrl,
+        previewUrl: localPreviewUrl,
+        status: "uploaded",
+      });
+
+      setSubmitMessage("Preview added. Sign in later if you want the image saved permanently in storage.");
+    } finally {
+      setImageUploading((current) => ({ ...current, [slot]: false }));
+    }
+  }
+
+  function validateForm() {
+    const errors: Record<string, string> = {};
+
+    if (!title.trim()) errors.title = "Event title is required.";
+    if (!eventType.trim()) errors.eventType = "Event type is required.";
+    if (!description.trim()) errors.description = "Description is required.";
+    if (!venueName.trim()) errors.venueName = "Venue name is required.";
+    if (!venueAddress.trim()) errors.venueAddress = "Venue/location is required.";
+    if (!city.trim()) errors.city = "City is required.";
+    if (!eventDate.trim()) errors.eventDate = "Event date is required.";
+    if (!startTime.trim()) errors.startTime = "Start time is required.";
+    if (!ageRequirement.trim()) errors.ageRequirement = "Age requirement is required.";
+    if (!attire.trim()) errors.attire = "Attire is required.";
+    if (!refundChoiceMade) errors.refundSetting = "Choose whether refunds are allowed.";
+    if (!contentPermissionAccepted) errors.contentPermission = "Content permission is required.";
+
+    const imageCount = [image1, image2, image3].filter(
+      (image) => Boolean(image?.previewUrl || image?.url)
+    ).length;
+
+    if (imageCount < 2) {
+      errors.images = "Upload at least 2 event images.";
+    }
+
+    const numericCapacity = Number(capacity || 0);
+    if (!Number.isFinite(numericCapacity) || numericCapacity <= 0) {
+      errors.capacity = "Event capacity is required.";
+    }
+
+    const activeTiers = ticketTiers.filter((tier) => tier.name.trim());
+
+    if (activeTiers.length === 0) {
+      errors.ticketTiers = "Create at least one ticket tier.";
+    } else {
+      let totalQuantity = 0;
+
+      for (const tier of activeTiers) {
+        const quantity = Number(tier.quantity || 0);
+        const price = Number(tier.price || 0);
+
+        if (!tier.name.trim()) {
+          errors.ticketTiers = "Every ticket tier needs a name.";
+          break;
+        }
+
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+          errors.ticketTiers = "Every ticket tier needs a quantity greater than 0.";
+          break;
+        }
+
+        if (!isFreeEvent && (!Number.isFinite(price) || price < 0)) {
+          errors.ticketTiers = "Every paid ticket tier needs a valid price.";
+          break;
+        }
+
+        totalQuantity += quantity;
+      }
+
+      if (!errors.ticketTiers && Number.isFinite(numericCapacity) && numericCapacity > 0) {
+        if (totalQuantity > numericCapacity) {
+          errors.ticketTiers = "Ticket quantities cannot exceed event capacity.";
+        }
+      }
+    }
+
+    setFieldErrors(errors);
+
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors,
+    };
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setHasTriedSubmit(true);
+    setSubmitMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const errors = validateForm();
+      setFieldErrors(errors);
+
+      if (
+        errors.title ||
+        errors.eventType ||
+        errors.description ||
+        errors.eventDate ||
+        errors.startTime ||
+        errors.venueName ||
+        errors.venueAddress ||
+        errors.city
+      ) {
+        setActiveStep(1);
+      } else if (
+        errors.ageRequirement ||
+        errors.attire ||
+        errors.refundSetting ||
+        errors.capacity ||
+        errors.ticketSetup
+      ) {
+        setActiveStep(2);
+      } else if (errors.images) {
+        setActiveStep(3);
+      } else if (errors.permission) {
+        setActiveStep(4);
+      }
+
+      if (Object.keys(errors).length > 0) {
+        setSubmitMessage("Please complete the required fields before publishing.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const tags = tagsInput
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+
+      const payload = {
+        title,
+        description,
+        category: eventType,
+        venueName,
+        venueAddress,
+        city,
+        venueWebsite,
+        eventDate,
+        startTime: to12HourDisplay(startTime),
+        ticketQuantity: Number(capacity),
+        ageRequirement,
+        customAgeRequirement,
+        attire,
+        refundsAllowed,
+        isFree: isFreeEvent,
+        earlyBirdEnabled,
+        vipEnabled,
+        vipPlusEnabled,
+        customTicketingEnabled: ticketTiers.some((tier) => tier.preset === "custom"),
+        adaInfo,
+        parkingInfo,
+        repPayoutEnabled,
+        repPayoutType,
+        repPayoutValue,
+        repInviteEmail,
+        repInviteRole,
+        faq1Question,
+        faq1Answer,
+        faq2Question,
+        faq2Answer,
+        faq3Question,
+        faq3Answer,
+        imageUrl1: image1?.previewUrl || image1?.url || "",
+        imageUrl2: image2?.previewUrl || image2?.url || "",
+        imageUrl3: image3?.previewUrl || image3?.url || "",
+        contentPermissionAccepted,
+        ticketTypes: ticketTiers,
+        tags,
+        organizationSlug: "sunset-social-group",
+      };
+
+      const res = await fetch("/api/events/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        setSubmitMessage(data.error || "Failed to publish event.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      router.push(`/event/${data.slug}`);
+    } catch (error) {
+      setSubmitMessage(
+        error instanceof Error ? error.message : "Something went wrong while publishing."
+      );
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-black text-white">\n      <style>{calendarStyles}</style>
+      <div className="mx-auto max-w-[1680px] px-6 py-12 md:px-8 md:py-14">
+        <Link href="/dashboard/organizer" className="text-sm text-zinc-400">
+          ← Back to Organizer Dashboard
+        </Link>
+
+        <div className="mt-6 grid gap-10 xl:grid-cols-[minmax(920px,1fr)_460px]">
+          <div className="min-w-0">
+            <div className={`bg-[radial-gradient(circle_at_top,rgba(162,89,255,0.18),transparent_42%),#09090b] p-8 md:p-10 ${shellCard}`}>
+              <div className="flex flex-col gap-7">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="max-w-2xl">
+                    <p className="text-xs uppercase tracking-[0.34em] text-[#CDA8FF]">
+                      EVNTSZN EVENT BUILDER
+                    </p>
+                    <h1 className="mt-3 text-4xl font-semibold tracking-tight md:text-6xl">
+                      Create Event
+                    </h1>
+                    <p className="mt-3 max-w-xl text-base leading-7 text-zinc-400">
+                      Premium event setup without the clutter. Fill the essentials first, preview it live, then publish.
+                    </p>
+                  </div>
+
+                  <div className="w-full max-w-xs rounded-2xl border border-[#A259FF]/45 bg-black/35 p-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-zinc-400">Completion</span>
+                      <span className="font-medium text-white">{completionCount}/15</span>
+                    </div>
+                    <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-900">
+                      <div
+                        className="h-full rounded-full bg-[#A259FF] shadow-[0_0_28px_rgba(162,89,255,0.9)]"
+                        style={{ width: `${Math.min((completionCount / 15) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <StepPill label="1. Basics" active={activeStep === 1} complete={step1Complete} onClick={() => setActiveStep(1)} />
+                  <StepPill label="2. Tickets" active={activeStep === 2} complete={step2Complete} onClick={() => setActiveStep(2)} />
+                  <StepPill label="3. Images" active={activeStep === 3} complete={step3Complete} onClick={() => setActiveStep(3)} />
+                  <StepPill label="4. Publish" active={activeStep === 4} complete={step4Complete} onClick={() => setActiveStep(4)} />
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="mt-8 space-y-8">
+              {activeStep === 1 && (
+                <section className={`${shellCard} p-7 md:p-8`}>
+                  <SectionHeader
+                    eyebrow="Phase 1"
+                    title="Event identity"
+                    description="Start with the event details attendees care about first."
+                  />
+
+                  <div className="space-y-7">
+                    <div>
+                      <Label required>Event Title</Label>
+                      <input
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className={hasTriedSubmit && fieldErrors.title ? inputErrorClass : inputClass}
+                        placeholder="Sunset Rooftop Experience"
+                      />
+                      <FieldError message={hasTriedSubmit ? fieldErrors.title : undefined} />
+                    </div>
+
+                    <div>
+                      <Label required>Event Type</Label>
+                      <select
+                        value={eventType}
+                        onChange={(e) => setEventType(e.target.value)}
+                        className={`${hasTriedSubmit && fieldErrors.eventType ? inputErrorClass : inputClass} appearance-none`}
+                      >
+                        <option value="">Select event type</option>
+                        {EVENT_TYPES.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                      <FieldError message={hasTriedSubmit ? fieldErrors.eventType : undefined} />
+                    </div>
+
+                    <div>
+                      <Label required>Description</Label>
+                      <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className={hasTriedSubmit && fieldErrors.description ? textareaErrorClass : textareaClass}
+                        placeholder="Describe the vibe, audience, and what people can expect."
+                      />
+                      <FieldError message={hasTriedSubmit ? fieldErrors.description : undefined} />
+                    </div>
+
+                    <div className={`${sectionCard} p-5`}>
+                      <p className="text-sm font-semibold text-white">Google Venue Search</p>
+                      <p className="mt-1 text-sm text-zinc-500">
+                        Search a real venue and let Google autofill the venue details.
+                      </p>
+
+                      <input
+                        ref={googleSearchRef}
+                        className={inputClass}
+                        placeholder="Search venue with Google"
+                      />
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <div>
+                        <Label required>Venue Name</Label>
+                        <input
+                          value={venueName}
+                          onChange={(e) => setVenueName(e.target.value)}
+                          className={hasTriedSubmit && fieldErrors.venueName ? inputErrorClass : inputClass}
+                          placeholder="Venue name"
+                        />
+                        <FieldError message={hasTriedSubmit ? fieldErrors.venueName : undefined} />
+                      </div>
+
+                      <div>
+                        <Label required>Venue / Location</Label>
+                        <input
+                          value={venueAddress}
+                          onChange={(e) => setVenueAddress(e.target.value)}
+                          className={hasTriedSubmit && fieldErrors.venueAddress ? inputErrorClass : inputClass}
+                          placeholder="Full venue address"
+                        />
+                        <FieldError message={hasTriedSubmit ? fieldErrors.venueAddress : undefined} />
+                      </div>
+
+                      <div>
+                        <Label required>City</Label>
+                        <input
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className={hasTriedSubmit && fieldErrors.city ? inputErrorClass : inputClass}
+                          placeholder="City"
+                        />
+                        <FieldError message={hasTriedSubmit ? fieldErrors.city : undefined} />
+                      </div>
+
+                      <div className="lg:col-span-2">
+                        <div className="grid gap-6 xl:grid-cols-[minmax(0,460px)_minmax(0,320px)]">
+                          <div>
+                            <Label required>Event Date</Label>
+                            <div
+                              className={`mt-2 rounded-[28px] border p-5 shadow-[0_0_0_1px_rgba(162,89,255,0.04)] ${
+                                hasTriedSubmit && fieldErrors.eventDate
+                                  ? "border-red-400/70 bg-zinc-950/92"
+                                  : "border-[#A259FF]/25 bg-[linear-gradient(180deg,rgba(162,89,255,0.06),rgba(0,0,0,0.16))]"
+                              }`}
+                            >
+                              <div className="mb-4 flex items-center justify-between text-sm">
+                                <span className="text-zinc-400">Selected date</span>
+                                <span className="font-medium text-white">
+                                  {selectedEventDate
+                                    ? format(selectedEventDate, "MMMM d, yyyy")
+                                    : "No date selected"}
+                                </span>
+                              </div>
+
+                              <DayPicker
+                                mode="single"
+                                selected={selectedEventDate}
+                                onSelect={(date) => {
+                                  if (!date) return;
+                                  const yyyy = date.getFullYear();
+                                  const mm = String(date.getMonth() + 1).padStart(2, "0");
+                                  const dd = String(date.getDate()).padStart(2, "0");
+                                  setEventDate(`${yyyy}-${mm}-${dd}`);
+                                }}
+                                showOutsideDays
+                                className="rdp-root"
+                              />
+                            </div>
+                            <FieldError message={hasTriedSubmit ? fieldErrors.eventDate : undefined} />
+                          </div>
+
+                          <div>
+                            <Label required>Start Time</Label>
+                            <select
+                              value={startTime}
+                              onChange={(e) => setStartTime(e.target.value)}
+                              className={`${hasTriedSubmit && fieldErrors.startTime ? inputErrorClass : inputClass} appearance-none`}
+                            >
+                              <option value="">Select time</option>
+                              {TIME_OPTIONS.map((time) => (
+                                <option key={time} value={time}>
+                                  {time}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-2 text-xs text-zinc-500">
+                              30-minute increments in 12-hour format.
+                            </p>
+                            <FieldError message={hasTriedSubmit ? fieldErrors.startTime : undefined} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-black transition hover:opacity-95"
+                      >
+                        Next: Tickets
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeStep === 2 && (
+                <section className={`${shellCard} p-7 md:p-8`}>
+                  <SectionHeader
+                    eyebrow="Phase 2"
+                    title="Tickets and policies"
+                    description="Set the rules, capacity, and pricing without crowding the screen."
+                  />
+
+                  <div className="space-y-8">
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      <div>
+                        <Label required>Age Requirement</Label>
+                        <select
+                          value={ageRequirement}
+                          onChange={(e) => setAgeRequirement(e.target.value)}
+                          className={`${hasTriedSubmit && fieldErrors.ageRequirement ? inputErrorClass : inputClass} appearance-none`}
+                        >
+                          {AGE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <FieldError message={hasTriedSubmit ? fieldErrors.ageRequirement : undefined} />
+                      </div>
+
+                      <div>
+                        <Label>Custom Age Range</Label>
+                        <input
+                          value={customAgeRequirement}
+                          onChange={(e) => setCustomAgeRequirement(e.target.value)}
+                          className={inputClass}
+                          placeholder="Optional: 25+ preferred"
+                        />
+                      </div>
+
+                      <div className="lg:col-span-2">
+                        <Label required>Attire</Label>
+                        <select
+                          value={attire}
+                          onChange={(e) => setAttire(e.target.value)}
+                          className={`${hasTriedSubmit && fieldErrors.attire ? inputErrorClass : inputClass} appearance-none`}
+                        >
+                          {ATTIRE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <FieldError message={hasTriedSubmit ? fieldErrors.attire : undefined} />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-6 xl:grid-cols-2">
+                      <ToggleCard
+                        title="Free Event"
+                        description="Make general entry free while keeping premium tiers optional."
+                        enabled={isFreeEvent}
+                        onChange={setIsFreeEvent}
+                      />
+
+                      <div className={`${sectionCard} p-5`}>
+                        <div className="mb-4">
+                          <p className="text-lg font-semibold text-white">
+                            Refund Setting <RequiredMark />
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-zinc-400">
+                            Choose whether refunds are allowed.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRefundsAllowed(true);
+                              setRefundChoiceMade(true);
+                            }}
+                            className={`h-12 rounded-2xl border text-sm font-semibold transition ${
+                              refundChoiceMade && refundsAllowed
+                                ? "border-[#A259FF] bg-[#A259FF]/18 text-white shadow-[0_0_0_1px_rgba(162,89,255,0.28)]"
+                                : "border-white/12 bg-zinc-950/65 text-zinc-300 hover:border-white/20"
+                            }`}
+                          >
+                            Yes
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRefundsAllowed(false);
+                              setRefundChoiceMade(true);
+                            }}
+                            className={`h-12 rounded-2xl border text-sm font-semibold transition ${
+                              refundChoiceMade && !refundsAllowed
+                                ? "border-[#A259FF] bg-[#A259FF]/18 text-white shadow-[0_0_0_1px_rgba(162,89,255,0.28)]"
+                                : "border-white/12 bg-zinc-950/65 text-zinc-300 hover:border-white/20"
+                            }`}
+                          >
+                            No
+                          </button>
+                        </div>
+
+                        <FieldError message={hasTriedSubmit ? fieldErrors.refundSetting : undefined} />
+                      </div>
+                    </div>
+
+                    <div className={`${sectionCard} p-6`}>
+                      <div className="max-w-[320px]">
+                        <Label required>Event Capacity</Label>
+                        <input
+                          value={capacity}
+                          onChange={(e) => setCapacity(e.target.value.replace(/[^\d]/g, ""))}
+                          className={hasTriedSubmit && fieldErrors.capacity ? inputErrorClass : inputClass}
+                          placeholder="100"
+                        />
+                        <FieldError message={hasTriedSubmit ? fieldErrors.capacity : undefined} />
+                      </div>
+
+                      <div className="mt-6 grid gap-5 md:grid-cols-2 2xl:grid-cols-3">
+                        <ToggleCard
+                          title="Early Bird"
+                          description="Discounted tier."
+                          enabled={earlyBirdEnabled}
+                          onChange={setEarlyBirdEnabled}
+                        />
+
+                        <ToggleCard
+                          title="VIP"
+                          description="VIP tier."
+                          enabled={vipEnabled}
+                          onChange={setVipEnabled}
+                        />
+
+                        <ToggleCard
+                          title="VIP+"
+                          description="Premium tier."
+                          enabled={vipPlusEnabled}
+                          onChange={setVipPlusEnabled}
+                        />
+                      </div>
+
+                      <div className="mt-8 rounded-3xl border border-white/10 bg-zinc-950/70 p-6">
+                        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                          <div className="max-w-xl">
+                            <p className="text-3xl font-semibold text-white">
+                              Ticket Types <RequiredMark />
+                            </p>
+                            <p className="mt-3 text-sm leading-7 text-zinc-400">
+                              Create ticket tiers, set prices, quantities, and descriptions.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={addCustomTier}
+                            className="inline-flex h-12 items-center justify-center rounded-2xl border border-[#A259FF]/45 bg-[#A259FF]/14 px-5 text-sm font-semibold text-white shadow-[0_0_24px_rgba(162,89,255,0.18)] transition hover:bg-[#A259FF]/20"
+                          >
+                            + Add Custom Tier
+                          </button>
+                        </div>
+
+                        <div className="mt-6 grid gap-4 md:grid-cols-3">
+                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                            <p className="text-sm text-zinc-500">Total Assigned</p>
+                            <p className="mt-2 text-3xl font-semibold text-white">{assignedCount}</p>
+                          </div>
+
+                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                            <p className="text-sm text-zinc-500">Capacity</p>
+                            <p className="mt-2 text-3xl font-semibold text-white">{capacity || "0"}</p>
+                          </div>
+
+                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                            <p className="text-sm text-zinc-500">Remaining</p>
+                            <p className={`mt-2 text-3xl font-semibold ${remainingCount >= 0 ? "text-emerald-300" : "text-red-300"}`}>
+                              {remainingCount}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 space-y-5">
+                          {ticketTiers.map((tier) => {
+                            const presetFreeTier =
+                              isFreeEvent &&
+                              (tier.preset === "ga" || tier.preset === "earlyBird");
+
+                            return (
+                              <div
+                                key={tier.id}
+                                className="rounded-3xl border border-white/10 bg-black/28 p-5"
+                              >
+                                <div className="grid gap-5">
+                                  <div className="max-w-[520px]">
+                                    <Label required>Ticket Name</Label>
+                                    <input
+                                      value={tier.name}
+                                      onChange={(e) => updateTier(tier.id, { name: e.target.value })}
+                                      className={inputClass}
+                                      placeholder="General Admission"
+                                      disabled={tier.preset !== "custom"}
+                                    />
+                                  </div>
+
+                                  <div className="grid gap-5 md:grid-cols-[minmax(220px,280px)_minmax(220px,280px)_auto] md:items-start">
+                                    <div className="flex flex-col">
+                                      <Label required={!presetFreeTier}>Price</Label>
+                                      <input
+                                        value={presetFreeTier ? "0" : tier.price}
+                                        onChange={(e) =>
+                                          updateTier(tier.id, {
+                                            price: e.target.value.replace(/[^\d.]/g, ""),
+                                          })
+                                        }
+                                        className={inputClass}
+                                        placeholder="0"
+                                        disabled={presetFreeTier}
+                                      />
+                                      <p className="mt-2 min-h-[20px] text-xs text-zinc-500">
+                                        {presetFreeTier ? "Free for this tier" : formatMoney(tier.price || "0")}
+                                      </p>
+                                    </div>
+
+                                    <div className="flex flex-col">
+                                      <Label required>Quantity</Label>
+                                      <input
+                                        value={tier.quantity}
+                                        onChange={(e) =>
+                                          updateTier(tier.id, {
+                                            quantity: e.target.value.replace(/[^\d]/g, ""),
+                                          })
+                                        }
+                                        className={inputClass}
+                                        placeholder="50"
+                                      />
+                                      <p className="mt-2 min-h-[20px] text-xs text-transparent select-none">
+                                        spacing
+                                      </p>
+                                    </div>
+
+                                    <div className="md:pt-[34px]">
+                                      {tier.preset === "custom" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeTier(tier.id)}
+                                          className="h-14 rounded-2xl border border-red-400/30 bg-red-400/10 px-5 text-sm font-semibold text-red-200"
+                                        >
+                                          Remove
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <Label>Ticket Description</Label>
+                                    <textarea
+                                      value={tier.description}
+                                      onChange={(e) =>
+                                        updateTier(tier.id, { description: e.target.value })
+                                      }
+                                      className="mt-2 min-h-[110px] w-full rounded-2xl border border-white/12 bg-zinc-950/85 p-4 text-white outline-none transition placeholder:text-zinc-500 focus:border-[#A259FF] focus:ring-1 focus:ring-[#A259FF]/50"
+                                      placeholder="Optional description for this ticket tier"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <FieldError message={hasTriedSubmit ? fieldErrors.ticketSetup : undefined} />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={goBack}
+                        className="rounded-2xl border border-white/12 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:border-white/20"
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-black transition hover:opacity-95"
+                      >
+                        Next: Images
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeStep === 3 && (
+                <section className={`${shellCard} p-7 md:p-8`}>
+                  <SectionHeader
+                    eyebrow="Phase 3"
+                    title="Event images"
+                    description="These images drive the customer-facing event card and event page."
+                  />
+
+                  <div className={`${sectionCard} p-6`}>
+                    <p className="text-sm leading-7 text-zinc-400">
+                      Upload 2 required images. EVNTSZN auto-fits images across cards and event pages, but best results use portrait images. Recommended: 1600 × 2000. Minimum: 1200 × 1500. Ideal ratio: 4:5. JPG, PNG, or WEBP. Max 8MB.
+                    </p>
+
+                    <div className="mt-6 grid gap-5 lg:grid-cols-3">
+                      {[
+                        { key: "image1", label: "Image 1", required: true, state: image1, loading: imageUploading.image1 },
+                        { key: "image2", label: "Image 2", required: true, state: image2, loading: imageUploading.image2 },
+                        { key: "image3", label: "Image 3", required: false, state: image3, loading: imageUploading.image3 },
+                      ].map((item) => (
+                        <div key={item.key} className="rounded-3xl border border-white/10 bg-zinc-950/70 p-4">
+                          <p className="text-xl font-semibold text-white">
+                            {item.label} {item.required ? <RequiredMark /> : null}
+                          </p>
+                          <p className="mt-3 text-sm leading-6 text-zinc-400">
+                            Recommended: 1600 × 2000. Minimum: 1200 × 1500. Ideal ratio: 4:5. EVNTSZN auto-fits this image for cards and event pages.
+                          </p>
+
+                          <label className="mt-5 inline-flex cursor-pointer items-center justify-center rounded-2xl bg-[#A259FF] px-5 py-3 text-sm font-semibold text-white shadow-[0_0_28px_rgba(162,89,255,0.45)] transition hover:opacity-95">
+                            {item.loading ? "Uploading..." : "Choose File"}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleImageChange(e, item.key as "image1" | "image2" | "image3")
+                              }
+                            />
+                          </label>
+
+                          <div className="mt-5 aspect-[4/5] overflow-hidden rounded-[22px] border border-white/10 bg-black/40">
+                            {item.state?.previewUrl ? (
+                              <img
+                                src={item.state.previewUrl}
+                                alt={item.label}
+                                className="h-[260px] w-full object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-[260px] items-center justify-center text-sm text-zinc-500">
+                                Not uploaded
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-3 space-y-1">
+                            <p className="break-all text-xs text-zinc-500">
+                              {item.state?.fileName ?? "No file selected"}
+                            </p>
+                            <p className={`text-xs ${
+                              item.state?.status === "uploaded"
+                                ? "text-emerald-300"
+                                : item.state?.status === "error"
+                                  ? "text-red-300"
+                                  : item.state?.status === "uploading"
+                                    ? "text-[#CDA8FF]"
+                                    : "text-zinc-600"
+                            }`}>
+                              {item.state?.status === "uploaded"
+                                ? "Uploaded"
+                                : item.state?.status === "error"
+                                  ? item.state.error || "Preview added locally. Sign in later to save permanently."
+                                  : item.state?.status === "uploading"
+                                    ? "Uploading..."
+                                    : "Waiting for upload"}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <FieldError message={hasTriedSubmit ? fieldErrors.images : undefined} />
+
+                    <div className="mt-8 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={goBack}
+                        className="rounded-2xl border border-white/12 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:border-white/20"
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={goNext}
+                        className="rounded-2xl bg-white px-6 py-3 text-sm font-semibold text-black transition hover:opacity-95"
+                      >
+                        Next: Extras & Publish
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeStep === 4 && (
+                <section className={`${shellCard} p-7 md:p-8`}>
+                  <SectionHeader
+                    eyebrow="Phase 4"
+                    title="Extras and publish"
+                    description="Optional upgrades stay hidden until you actually need them."
+                  />
+
+                  <div className="space-y-5">
+                    <ExpandRow
+                      title="Venue extras"
+                      subtitle="ADA info, parking info, and venue website"
+                      open={showVenueExtras}
+                      onClick={() => setShowVenueExtras((prev) => !prev)}
+                    />
+
+                    {showVenueExtras && (
+                      <div className={`${sectionCard} p-6`}>
+                        <div className="grid gap-6 lg:grid-cols-2">
+                          <div>
+                            <Label>Venue Website</Label>
+                            <input
+                              value={venueWebsite}
+                              onChange={(e) => setVenueWebsite(e.target.value)}
+                              className={inputClass}
+                              placeholder="https://venuewebsite.com"
+                            />
+                          </div>
+
+                          <div>
+                            <Label>ADA Info</Label>
+                            <textarea
+                              value={adaInfo}
+                              onChange={(e) => setAdaInfo(e.target.value)}
+                              className={textareaClass}
+                              placeholder="Optional ADA details"
+                            />
+                          </div>
+
+                          <div className="lg:col-span-2">
+                            <Label>Parking Info</Label>
+                            <textarea
+                              value={parkingInfo}
+                              onChange={(e) => setParkingInfo(e.target.value)}
+                              className={textareaClass}
+                              placeholder="Optional parking details"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <ExpandRow
+                      title="Tags"
+                      subtitle="Add discovery tags"
+                      open={showTags}
+                      onClick={() => setShowTags((prev) => !prev)}
+                    />
+
+                    {showTags && (
+                      <div className={`${sectionCard} p-6`}>
+                        <Label>Tags</Label>
+                        <input
+                          value={tagsInput}
+                          onChange={(e) => setTagsInput(e.target.value)}
+                          className={inputClass}
+                          placeholder="rooftop, nightlife, baltimore"
+                        />
+                      </div>
+                    )}
+
+                    <ExpandRow
+                      title="FAQs"
+                      subtitle="Add common attendee questions"
+                      open={showFaqs}
+                      onClick={() => setShowFaqs((prev) => !prev)}
+                    />
+
+                    {showFaqs && (
+                      <div className={`${sectionCard} space-y-4 p-6`}>
+                        <input value={faq1Question} onChange={(e) => setFaq1Question(e.target.value)} className={inputClass} placeholder="FAQ 1 Question" />
+                        <textarea value={faq1Answer} onChange={(e) => setFaq1Answer(e.target.value)} className={textareaClass} placeholder="FAQ 1 Answer" />
+                        <input value={faq2Question} onChange={(e) => setFaq2Question(e.target.value)} className={inputClass} placeholder="FAQ 2 Question" />
+                        <textarea value={faq2Answer} onChange={(e) => setFaq2Answer(e.target.value)} className={textareaClass} placeholder="FAQ 2 Answer" />
+                        <input value={faq3Question} onChange={(e) => setFaq3Question(e.target.value)} className={inputClass} placeholder="FAQ 3 Question" />
+                        <textarea value={faq3Answer} onChange={(e) => setFaq3Answer(e.target.value)} className={textareaClass} placeholder="FAQ 3 Answer" />
+                      </div>
+                    )}
+
+                    <ExpandRow
+                      title="Rep / promoter payouts"
+                      subtitle="Optional ticket-linked payouts"
+                      open={showPromoterExtras}
+                      onClick={() => setShowPromoterExtras((prev) => !prev)}
+                    />
+
+                    {showPromoterExtras && (
+                      <div className={`${sectionCard} p-6`}>
+                        <div className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-zinc-950/65 p-5">
+                          <div className="min-w-0">
+                            <p className="text-lg font-semibold text-white">Enable payout tracking</p>
+                            <p className="mt-2 text-sm leading-6 text-zinc-400">
+                              Invite a rep or promoter and tie ticket sales to them.
+                            </p>
+                          </div>
+
+                          <Toggle enabled={repPayoutEnabled} onChange={setRepPayoutEnabled} />
+                        </div>
+
+                        {repPayoutEnabled && (
+                          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+                            <div>
+                              <Label>Rep / Promoter Email</Label>
+                              <input
+                                value={repInviteEmail}
+                                onChange={(e) => setRepInviteEmail(e.target.value)}
+                                className={inputClass}
+                                placeholder="rep@example.com"
+                              />
+                            </div>
+
+                            <div>
+                              <Label>Role</Label>
+                              <select
+                                value={repInviteRole}
+                                onChange={(e) => setRepInviteRole(e.target.value)}
+                                className={`${inputClass} appearance-none`}
+                              >
+                                <option value="promoter">Promoter</option>
+                                <option value="rep">Rep</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <Label>Payout Type</Label>
+                              <select
+                                value={repPayoutType}
+                                onChange={(e) => setRepPayoutType(e.target.value)}
+                                className={`${inputClass} appearance-none`}
+                              >
+                                <option value="percent">Percentage</option>
+                                <option value="flat">Dollar Amount</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <Label>Payout Value</Label>
+                              <input
+                                value={repPayoutValue}
+                                onChange={(e) => setRepPayoutValue(e.target.value)}
+                                className={inputClass}
+                                placeholder={repPayoutType === "percent" ? "10" : "5.00"}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="rounded-3xl border border-[#A259FF]/70 bg-[linear-gradient(180deg,rgba(162,89,255,0.12),rgba(0,0,0,0.15))] p-6 shadow-[0_0_0_1px_rgba(162,89,255,0.08)]">
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={contentPermissionAccepted}
+                          onChange={(e) => setContentPermissionAccepted(e.target.checked)}
+                          className="mt-1 h-4 w-4 accent-[#A259FF]"
+                        />
+                        <span className="text-sm leading-7 text-zinc-300">
+                          I confirm that I own or have the necessary rights and permissions to upload and use this event content, including images and promotional materials, and I grant EVNTSZN permission to display, distribute, repost, publish, promote, advertise, and otherwise use this content across the EVNTSZN platform, EVNTSZN social media channels, paid and organic marketing campaigns, promotional placements, and related brand materials for event discovery, promotion, and marketing purposes.
+                          <RequiredMark />
+                        </span>
+                      </label>
+
+                      <FieldError message={hasTriedSubmit ? fieldErrors.permission : undefined} />
+                    </div>
+
+                    {submitMessage && (
+                      <div className="rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-4">
+                        <p className="text-sm font-medium text-red-300">{submitMessage}</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-4 pt-2">
+                      <button
+                        type="button"
+                        onClick={goBack}
+                        className="rounded-2xl border border-white/12 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:border-white/20"
+                      >
+                        Back
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="rounded-2xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSubmitting ? "Publishing..." : "Publish Event"}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+            </form>
+          </div>
+
+          <aside className="min-w-0 xl:sticky xl:top-8 xl:self-start">
+            <div className="overflow-hidden rounded-[34px] border border-[#A259FF]/60 bg-zinc-950/94 shadow-[0_0_0_1px_rgba(162,89,255,0.08),0_35px_100px_rgba(0,0,0,0.52)]">
+              <div className="border-b border-white/10 p-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="max-w-[260px]">
+                    <p className="text-xs uppercase tracking-[0.24em] text-[#D0B0FF]">Live Preview</p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">
+                      Toggle between the discovery card and the attendee event page.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-full border border-white/10 bg-black/30 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode("card")}
+                      className={`rounded-full px-4 py-2 text-sm transition ${
+                        previewMode === "card"
+                          ? "border border-[#A259FF]/45 bg-[#A259FF]/18 text-white"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      Card
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMode("page")}
+                      className={`rounded-full px-4 py-2 text-sm transition ${
+                        previewMode === "page"
+                          ? "border border-[#A259FF]/45 bg-[#A259FF]/18 text-white"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      Page
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6">
+                {previewMode === "card" ? (
+                  <div className="overflow-hidden rounded-[30px] border border-[#A259FF]/45 bg-black/35 shadow-[0_0_0_1px_rgba(162,89,255,0.06)]">
+                    <div className="relative h-[620px] overflow-hidden">
+                      {previewImage ? (
+                        <img src={previewImage} alt="Event card preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-[radial-gradient(circle_at_top,rgba(162,89,255,0.28),transparent_42%),linear-gradient(180deg,#111,#09090b)]" />
+                      )}
+
+                      <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.06),rgba(0,0,0,0.84))]" />
+
+                      <div className="absolute left-5 top-5 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-white/15 bg-black/35 px-3.5 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-white backdrop-blur">
+                          {previewType}
+                        </span>
+                        <span className="rounded-full border border-[#A259FF]/45 bg-[#A259FF]/15 px-3.5 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#DEC9FF] backdrop-blur">
+                          {previewLowestPrice}
+                        </span>
+                      </div>
+
+                      <div className="absolute inset-x-0 bottom-0 p-5">
+                        <div className="rounded-[24px] border border-white/10 bg-black/50 p-5 backdrop-blur">
+                          <p className="text-[11px] uppercase tracking-[0.24em] text-zinc-400">
+                            {previewDateShort} • {previewTime}
+                          </p>
+                          <h3 className="mt-3 line-clamp-2 text-3xl font-semibold leading-tight text-white">
+                            {previewTitle}
+                          </h3>
+                          <p className="mt-3 text-base text-zinc-300">{previewVenue}</p>
+                          <p className="mt-1 text-sm text-zinc-500">{previewCity}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-[30px] border border-[#A259FF]/45 bg-black/35 shadow-[0_0_0_1px_rgba(162,89,255,0.06)]">
+                    <div className="relative h-[820px] overflow-y-auto">
+                      <div className="relative h-[280px] overflow-hidden border-b border-white/10">
+                        {previewImage ? (
+                          <img src={previewImage} alt="Event page hero preview" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full bg-[radial-gradient(circle_at_top,rgba(162,89,255,0.3),transparent_42%),#09090b]" />
+                        )}
+
+                        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,0,0,0.08),rgba(0,0,0,0.78))]" />
+
+                        <div className="absolute inset-x-0 bottom-0 p-5">
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full border border-[#A259FF]/55 bg-[#A259FF]/15 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[#DEC9FF]">
+                              {previewType}
+                            </span>
+                            <span className="rounded-full border border-white/12 bg-black/35 px-3 py-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-white">
+                              {previewCity}
+                            </span>
+                          </div>
+
+                          <h3 className="mt-4 text-3xl font-semibold leading-tight text-white">
+                            {previewTitle}
+                          </h3>
+
+                          <p className="mt-3 text-sm text-zinc-300">
+                            {previewDateLong} • {previewTime}
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-400">{previewVenue}</p>
+                        </div>
+                      </div>
+
+                      <div className="p-5">
+                        <div className="grid gap-4">
+                          <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                            <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">About</p>
+                            <p className="mt-3 text-sm leading-7 text-zinc-300">
+                              {description.trim() || "Your event description will appear here."}
+                            </p>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Attire</p>
+                              <p className="mt-3 text-sm text-zinc-300">{attire || "Not specified"}</p>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Age</p>
+                              <p className="mt-3 text-sm text-zinc-300">
+                                {[ageRequirement, customAgeRequirement].filter(Boolean).join(" • ")}
+                              </p>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Refunds</p>
+                              <p className="mt-3 text-sm text-zinc-300">
+                                {refundChoiceMade ? (refundsAllowed ? "Refunds allowed" : "No refunds") : "Not set"}
+                              </p>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Starting At</p>
+                              <p className="mt-3 text-sm text-zinc-300">{previewLowestPrice}</p>
+                            </div>
+                          </div>
+
+                          {previewTags.length > 0 && (
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Tags</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {previewTags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] uppercase tracking-[0.16em] text-zinc-300"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="rounded-2xl border border-[#A259FF]/35 bg-[#A259FF]/8 p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Tickets</p>
+                                <p className="mt-2 text-sm text-zinc-400">Preview the attendee ticket flow.</p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setPreviewTicketDrawerOpen((prev) => !prev)}
+                                className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black"
+                              >
+                                {previewTicketDrawerOpen ? "Close Tickets" : "Get Tickets"}
+                              </button>
+                            </div>
+
+                            {!previewTicketDrawerOpen ? (
+                              <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">
+                                Open the ticket drawer to preview the purchase experience.
+                              </div>
+                            ) : (
+                              <div className="mt-4 rounded-3xl border border-white/10 bg-black/45 p-4">
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-semibold text-white">Choose your ticket</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewTicketDrawerOpen(false)}
+                                    className="text-sm text-zinc-400"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+
+                                <div className="mt-4 space-y-3">
+                                  {ticketTiers.map((tier) => {
+                                    const presetFreeTier =
+                                      isFreeEvent &&
+                                      (tier.preset === "ga" || tier.preset === "earlyBird");
+
+                                    return (
+                                      <div
+                                        key={tier.id}
+                                        className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4"
+                                      >
+                                        <div className="flex items-start justify-between gap-4">
+                                          <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-white">{tier.name}</p>
+                                            <p className="mt-1 text-xs leading-6 text-zinc-400">
+                                              {tier.description || "Ticket description preview"}
+                                            </p>
+                                          </div>
+
+                                          <div className="text-right">
+                                            <p className="text-sm font-semibold text-white">
+                                              {presetFreeTier ? "Free" : formatMoney(tier.price || "0")}
+                                            </p>
+                                            <p className="mt-1 text-[11px] text-zinc-500">
+                                              Qty {tier.quantity || "0"}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                <button
+                                  type="button"
+                                  className="mt-4 h-12 w-full rounded-2xl bg-white text-sm font-semibold text-black"
+                                >
+                                  Continue
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {visibleFaqs.length > 0 && (
+                            <div className="rounded-2xl border border-white/10 bg-zinc-950/70 p-4">
+                              <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">FAQs</p>
+                              <div className="mt-3 space-y-3">
+                                {visibleFaqs.map((item, index) => (
+                                  <div
+                                    key={`${item.q}-${index}`}
+                                    className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                                  >
+                                    <p className="text-sm font-semibold text-white">{item.q}</p>
+                                    <p className="mt-2 text-xs leading-6 text-zinc-400">{item.a}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-5 rounded-2xl border border-white/10 bg-black/30 p-5">
+                  <p className="text-xs uppercase tracking-[0.22em] text-[#D0B0FF]">Image Guidance</p>
+                  <p className="mt-3 text-sm leading-7 text-zinc-400">
+                    Best result: portrait cover image, subject centered, clean lighting, readable title contrast, 1600 × 2000 recommended.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
+}
