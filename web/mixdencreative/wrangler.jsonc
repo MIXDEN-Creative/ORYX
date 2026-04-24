@@ -1,5 +1,5 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "mixden-creative",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-04-24",
@@ -7,8 +7,5 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
-  },
-  "observability": {
-    "enabled": true
   }
 }
