@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 export function Hero() {
   return (
     <section
@@ -43,13 +41,14 @@ export function Hero() {
           <div className="absolute -inset-6 rounded-[2rem] bg-[linear-gradient(145deg,rgba(162,89,255,0.34),rgba(245,245,245,0.06),transparent)] blur-2xl" />
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(160deg,rgba(245,245,245,0.08),rgba(46,46,46,0.52))] p-6 shadow-[0_30px_100px_rgba(0,0,0,0.45)]">
             <div className="rounded-[1.5rem] border border-white/10 bg-black/60 p-5">
-              <Image
+              <img
                 src="/images/mixden-creative-logo.png"
                 alt="MIXDEN Creative logo"
                 width={620}
                 height={620}
                 className="h-auto w-full object-contain"
-                priority
+                loading="eager"
+                decoding="async"
               />
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-3">

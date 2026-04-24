@@ -4,8 +4,30 @@ type HapioStatus = {
   hasApiBaseUrl: boolean;
 };
 
+function normalizePublicUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function getHapioStatus(): HapioStatus {
-  const bookingUrl = process.env.NEXT_PUBLIC_HAPIO_BOOKING_URL?.trim() || null;
+  const bookingUrl = normalizePublicUrl(
+    process.env.NEXT_PUBLIC_HAPIO_BOOKING_URL,
+  );
   const token = process.env.HAPIO_API_TOKEN?.trim();
   const apiBaseUrl = process.env.HAPIO_API_BASE_URL?.trim();
 

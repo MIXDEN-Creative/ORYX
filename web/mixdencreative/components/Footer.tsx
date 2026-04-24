@@ -1,16 +1,16 @@
-import Image from "next/image";
-
 export function Footer() {
   return (
     <footer className="border-t border-white/10 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-4">
-          <Image
+          <img
             src="/images/mixden-creative-logo.png"
             alt="MIXDEN Creative"
             width={136}
             height={48}
             className="h-10 w-auto"
+            loading="lazy"
+            decoding="async"
           />
           <div className="space-y-1 text-sm text-white/62">
             <p>MIXDEN Creative</p>

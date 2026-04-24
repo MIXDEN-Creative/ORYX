@@ -7,6 +7,8 @@ export function BookingSection({
   bookingUrl,
   hasServerIntegration,
 }: BookingSectionProps) {
+  const canEmbedBooking = Boolean(bookingUrl);
+
   return (
     <section id="booking" className="px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
       <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
@@ -56,11 +58,13 @@ export function BookingSection({
         </div>
 
         <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(160deg,rgba(255,255,255,0.08),rgba(18,18,18,0.96))] p-2 shadow-[0_30px_90px_rgba(0,0,0,0.34)]">
-          {bookingUrl ? (
+          {canEmbedBooking ? (
             <iframe
-              src={bookingUrl}
+              src={bookingUrl ?? undefined}
               title="MIXDEN Creative booking"
               className="min-h-[580px] w-full rounded-[1.5rem] bg-white"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
             />
           ) : (
             <div className="flex min-h-[580px] flex-col justify-between rounded-[1.5rem] border border-dashed border-white/12 bg-black/60 p-6">
